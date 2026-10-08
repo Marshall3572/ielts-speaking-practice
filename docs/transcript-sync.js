@@ -5,8 +5,6 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const wordPattern = /\b[A-Za-z]+(?:['’-][A-Za-z]+)*\b/g;
-
   function sentenceTexts(text) {
     const value = String(text ?? '').trim();
     if (!value) return [];
@@ -24,18 +22,19 @@
     );
   }
 
-  function createTimeline(segments, duration) {
-    if (!Array.isArray(segments) || !segments.length || !Number.isFinite(duration) || duration <= 0) return [];
-    const weights = segments.map(segment => {
-      const words = String(segment.text ?? '').match(wordPattern)?.length || 1;
-      return words + 2;
-    });
-    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-    let elapsed = 0;
+  function createTimeline(segments, duration, recording) {
+    if (!Array.isArray(segments) || !segments.length || !Number.isFinite(duration) || duration <= 0
+      || !Array.isArray(recording?.segments) || recording.segments.length !== segments.length
+      || !Number.isFinite(recording.duration) || Math.abs(recording.duration - duration) > 0.15) return [];
+    const valid = recording.segments.every((cue, index) =>
+      cue.text === segments[index].text && Number.isFinite(cue.start) && Number.isFinite(cue.end)
+      && cue.start >= 0 && cue.end > cue.start && cue.end <= recording.duration + 0.05
+      && (index === 0 ? cue.start === 0 : Math.abs(cue.start - recording.segments[index - 1].end) < 0.001),
+    );
+    if (!valid || Math.abs(recording.segments.at(-1).end - recording.duration) > 0.05) return [];
     return segments.map((segment, index) => {
-      const start = elapsed;
-      elapsed = index === segments.length - 1 ? duration : elapsed + duration * weights[index] / totalWeight;
-      return { ...segment, start, end: elapsed };
+      const { start, end } = recording.segments[index];
+      return { ...segment, start, end };
     });
   }
 

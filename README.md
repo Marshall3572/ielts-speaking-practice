@@ -5,6 +5,13 @@ and reusable stories. It includes bilingual prompts, memorisation mode,
 device-local learned progress, and 172 synthesized British English audio files
 (macOS Daniel, 160 words per minute).
 
+All 95 Part 2 answers and 24 shared stories also include sentence-by-sentence
+Chinese translations, paragraph themes, English memory backbones and a final
+memory tip. Reading and copying use the bilingual memorisation format; audio
+continues to follow only the original English. Part 1 and Part 3 remain unchanged.
+Translations live in `docs/bilingual-data.js` and are shown only when their
+paragraphs and sentences exactly match the current English content.
+
 Only the public static site is included. Practice experiences are examples,
 and this is not an official IELTS question bank or a score guarantee.
 

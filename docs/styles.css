@@ -530,6 +530,66 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.bilingual .paragraph-title {
+  margin: 26px 0 20px;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: calc(var(--reader-font-size) - 3px);
+  line-height: 1.6;
+  color: var(--green);
+}
+
+.bilingual .sentence-pair {
+  margin: 0 0 26px;
+  padding: 0 0 0 16px;
+  border-left: 3px solid #dbe5dc;
+}
+
+.bilingual .sentence-pair p {
+  margin: 0 0 8px;
+}
+
+.bilingual .sentence-pair p:last-child {
+  margin-bottom: 0;
+}
+
+.bilingual .sentence-zh,
+.bilingual .memory-skeleton,
+.bilingual .memory-tip {
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: calc(var(--reader-font-size) - 3px);
+  line-height: 1.8;
+}
+
+.bilingual .sentence-zh {
+  color: #4b5e54;
+}
+
+.bilingual .memory-skeleton {
+  font-size: calc(var(--reader-font-size) - 5px);
+  color: #5b7063;
+}
+
+.bilingual .memory-skeleton [lang="en"] {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.bilingual .paragraph-divider {
+  margin: 30px 0;
+  border: 0;
+  border-top: 1px solid #dbe5dc;
+}
+
+.bilingual .memory-tip {
+  margin-top: 30px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #f0f4ed;
+}
+
+.bilingual .memory-tip p {
+  margin: 8px 0 0;
+}
+
 .question {
   font-family: Georgia, "Times New Roman", serif;
   color: var(--green);

@@ -21,16 +21,29 @@ test('splitTranscript keeps sentence order and paragraph ownership', () => {
   ]);
 });
 
-test('createTimeline assigns more time to a longer sentence and fills the audio duration', () => {
+test('createTimeline uses recorded audio boundaries even when word lengths suggest different timing', () => {
   const timeline = createTimeline([
     { text: 'One two.', paragraphIndex: 0 },
     { text: 'Three four five six.', paragraphIndex: 0 },
-  ], 10);
+  ], 10, { duration: 10, segments: [
+    { text: 'One two.', start: 0, end: 7.5 },
+    { text: 'Three four five six.', start: 7.5, end: 10 },
+  ] });
 
   assert.deepEqual(timeline, [
-    { text: 'One two.', paragraphIndex: 0, start: 0, end: 4 },
-    { text: 'Three four five six.', paragraphIndex: 0, start: 4, end: 10 },
+    { text: 'One two.', paragraphIndex: 0, start: 0, end: 7.5 },
+    { text: 'Three four five six.', paragraphIndex: 0, start: 7.5, end: 10 },
   ]);
+});
+
+test('unverified, stale or invalid audio cues never produce estimated highlighting', () => {
+  const segments = [{ text: 'Hello.', paragraphIndex: 0 }];
+  const cues = { duration: 5, segments: [{ text: 'Hello.', start: 0, end: 5 }] };
+  assert.deepEqual(createTimeline(segments, 5), []);
+  assert.deepEqual(createTimeline(segments, 9, cues), []);
+  assert.deepEqual(createTimeline(segments, 5, { ...cues, segments: [{ text: 'Changed.', start: 0, end: 5 }] }), []);
+  assert.deepEqual(createTimeline(segments, 5, { ...cues, segments: [{ text: 'Hello.', start: 3, end: 2 }] }), []);
+  assert.equal(findActiveSegment(createTimeline(segments, 5, cues), 4.99), 0);
 });
 
 test('findActiveSegment follows seeks and treats a boundary as the next sentence', () => {

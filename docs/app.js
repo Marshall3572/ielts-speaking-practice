@@ -468,6 +468,11 @@
       return asArray(value).map(text => `<p lang="en">${escape(text)}</p>`).join('');
     }
 
+    function bilingualArticle(item) {
+      const entry = root.IELTS_BILINGUAL?.[item.id];
+      return root.IELTSBilingual?.validArticle(item, entry) ? entry : null;
+    }
+
     function renderQAContent(item) {
       if (preferences.answerMode === 'full') {
         return item.questions.map(question => `
@@ -494,6 +499,8 @@
 
     function renderStoryContent(item, master) {
       if (preferences.answerMode === 'full') {
+        const entry = bilingualArticle(item);
+        if (entry) return root.IELTSBilingual.renderArticle(entry, transcriptText);
         return `<div class="english">${transcriptParagraphs(item.script)}</div>`;
       }
       const cues = item.keywords || master?.keywords;
@@ -591,7 +598,7 @@
               <button class="reader-more" id="more-open" type="button" aria-expanded="false"
                 aria-controls="more-popover">更多</button>
               <div class="more-popover" id="more-popover" hidden>
-                <button type="button" id="copy">复制全文</button>
+                <button type="button" id="copy">${!isQA && bilingualArticle(item) ? '复制中英稿' : '复制全文'}</button>
                 <button type="button" id="font-size">字号：${fontLabel}</button>
                 <button type="button" id="open-sources">题库来源与使用说明</button>
               </div>
@@ -620,7 +627,7 @@
             </div>
             <div class="reader-secondary">
               <button class="btn primary" id="listen" type="button">${readerListenLabel()}</button>
-              <button class="btn copy-inline" id="copy-inline" type="button">复制全文</button>
+              <button class="btn copy-inline" id="copy-inline" type="button">${!isQA && bilingualArticle(item) ? '复制中英稿' : '复制全文'}</button>
               <button class="btn font-inline" id="font-size-inline" type="button">字号：${fontLabel}</button>
               <button class="btn ${learned[progressKeyFor(view, item)] ? 'active' : ''}" id="mark"
                 type="button" aria-pressed="${Boolean(learned[progressKeyFor(view, item)])}">
@@ -807,7 +814,8 @@
     async function copySelected() {
       const item = selectedItem();
       if (!item) return;
-      const content = fullEnglishAnswer(item);
+      const entry = (view === 'p2' || view === 'stories') ? bilingualArticle(item) : null;
+      const content = entry ? root.IELTSBilingual.toMarkdown(item, entry) : fullEnglishAnswer(item);
       try {
         if (root.navigator.clipboard?.writeText) await root.navigator.clipboard.writeText(content);
         else {
@@ -820,7 +828,7 @@
           if (!document.execCommand('copy')) throw new Error('copy');
           textarea.remove();
         }
-        toast('全文已复制');
+        toast(entry ? '中英背诵稿已复制' : '全文已复制');
       } catch {
         toast('复制未成功，请长按文字选择复制');
       }
@@ -842,7 +850,7 @@
 
     function refreshTranscriptTimeline() {
       transcriptTimeline = isPlayingSelection()
-        ? transcriptSync.createTimeline(transcriptSegments, audio.duration)
+        ? transcriptSync.createTimeline(transcriptSegments, audio.duration, root.IELTS_AUDIO_CUES?.[playerItem().audio])
         : [];
     }
 
