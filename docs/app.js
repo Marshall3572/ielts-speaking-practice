@@ -121,6 +121,22 @@
     return Math.max(0, Math.min(length - 1, index + direction));
   }
 
+  function reconcileSelectedId({ selectedId, items, mobile, filterChanged }) {
+    if (!filterChanged && selectedId) return selectedId;
+    if (selectedId && items.some(item => item.id === selectedId)) return selectedId;
+    return mobile ? null : (items[0]?.id || null);
+  }
+
+  function nextListScrollTop({ mobile, mobileScreen, saved, current }) {
+    return mobile && mobileScreen !== 'list' ? saved : current;
+  }
+
+  function classifyPlaybackFailure(name) {
+    if (name === 'AbortError') return 'ignore';
+    if (name === 'NotAllowedError') return 'autoplay';
+    return 'media';
+  }
+
   function validateProgressImport(payload, collections) {
     if (!payload || typeof payload !== 'object' || payload.version !== 1) {
       return { valid: {}, ignored: 0, error: '不支持的进度文件版本' };
@@ -312,8 +328,13 @@
     }
 
     function saveListScroll() {
-      if (mobileMedia.matches) currentContext().listScrollTop = root.scrollY;
-      else currentContext().listScrollTop = $('list').scrollTop;
+      const context = currentContext();
+      context.listScrollTop = nextListScrollTop({
+        mobile: mobileMedia.matches,
+        mobileScreen,
+        saved: context.listScrollTop,
+        current: mobileMedia.matches ? root.scrollY : $('list').scrollTop,
+      });
     }
 
     function restoreListScroll() {
@@ -358,17 +379,22 @@
       `).join('');
     }
 
-    function ensureSelectionForResults(items) {
+    function reconcileSelectionForResults(items) {
       const context = currentContext();
       if (context.keepReadingAfterRemoval && selectedItem()) return;
-      if (context.selectedId && items.some(item => item.id === context.selectedId)) return;
-      context.selectedId = mobileMedia.matches ? null : (items[0]?.id || null);
+      const nextId = reconcileSelectedId({
+        selectedId: context.selectedId,
+        items,
+        mobile: mobileMedia.matches,
+        filterChanged: true,
+      });
+      if (nextId !== context.selectedId) revealedQuestionIndexes = new Set();
+      context.selectedId = nextId;
     }
 
     function renderList() {
       const context = currentContext();
       const items = filtered();
-      ensureSelectionForResults(items);
       const learnedCount = currentItems().filter(item => learned[progressKeyFor(view, item)]).length;
       $('listcount').textContent = `当前结果 ${items.length} / ${currentItems().length} · 已背 ${learnedCount}`;
       $('only-unlearned').setAttribute('aria-pressed', String(context.onlyUnlearned));
@@ -677,17 +703,18 @@
     }
 
     function resetCurrentFilters() {
-      const selectedId = currentContext().selectedId;
       contexts[view] = {
         ...createBrowseContexts()[view],
-        selectedId: mobileMedia.matches ? null : selectedId,
       };
       $('search').value = '';
+      userChangedBrowseContext();
+      reconcileSelectionForResults(filtered());
       render();
     }
 
     function userChangedBrowseContext() {
       currentContext().keepReadingAfterRemoval = false;
+      revealedQuestionIndexes = new Set();
       if (player.queue.length) player.followReader = false;
       if (mobileMedia.matches) mobileScreen = 'list';
     }
@@ -700,6 +727,7 @@
       mobileScreen = 'list';
       revealedQuestionIndexes = new Set();
       if (origin === 'user') userChangedBrowseContext();
+      reconcileSelectionForResults(filtered());
       render();
       if (writeRoute) setRoute(view, null, 'push');
       restoreListScroll();
@@ -734,11 +762,11 @@
       mobileScreen = 'list';
       render();
       if (writeRoute) setRoute(view, null, 'push');
-      restoreListScroll();
       root.requestAnimationFrame(() => {
         const selectedId = currentContext().selectedId;
         const target = selectedId ? document.querySelector(`[data-id="${root.CSS?.escape ? root.CSS.escape(selectedId) : selectedId}"]`) : null;
-        (target || $('list-title')).focus?.();
+        (target || $('list-title')).focus?.({ preventScroll: true });
+        root.requestAnimationFrame(restoreListScroll);
       });
     }
 
@@ -933,7 +961,10 @@
         return;
       }
       if (isPlayingSelection()) {
-        if (audio.paused) audio.play().catch(handleAutoplayFailure);
+        if (audio.paused) {
+          const requestId = player.requestId;
+          audio.play().catch(error => handlePlaybackFailure(error, requestId));
+        }
         else audio.pause();
         return;
       }
@@ -951,10 +982,17 @@
       playCurrentAudio({ autoplay: true });
     }
 
-    function handleAutoplayFailure(error) {
-      if (error?.name === 'AbortError') return;
-      player.status = 'paused';
-      $('audio-status').textContent = '浏览器阻止了自动播放，请点播放键继续。';
+    function handlePlaybackFailure(error, requestId = player.requestId) {
+      if (requestId !== player.requestId) return;
+      const kind = classifyPlaybackFailure(error?.name);
+      if (kind === 'ignore') return;
+      if (kind === 'autoplay') {
+        player.status = 'paused';
+        $('audio-status').textContent = '浏览器阻止了自动播放，请点播放键继续。';
+      } else {
+        player.status = 'error';
+        $('audio-status').innerHTML = '音频加载失败，请检查网络。 <button class="btn" id="audio-retry" type="button">重试</button>';
+      }
       renderPlayer();
     }
 
@@ -982,8 +1020,7 @@
       renderPlayer();
       if (autoplay) {
         audio.play().catch(error => {
-          if (requestId !== player.requestId) return;
-          handleAutoplayFailure(error);
+          handlePlaybackFailure(error, requestId);
         });
       }
     }
@@ -1001,8 +1038,11 @@
     }
 
     function retryAudio() {
+      const requestId = ++player.requestId;
+      player.status = 'loading';
+      $('audio-status').textContent = '正在重新加载音频 · --:--';
       audio.load();
-      audio.play().catch(handleAutoplayFailure);
+      audio.play().catch(error => handlePlaybackFailure(error, requestId));
     }
 
     function closePlayer() {
@@ -1095,8 +1135,8 @@
       searchTimer = root.setTimeout(() => {
         saveListScroll();
         currentContext().query = normalizeSearch($('search').value);
-        currentContext().keepReadingAfterRemoval = false;
-        if (player.queue.length) player.followReader = false;
+        userChangedBrowseContext();
+        reconcileSelectionForResults(filtered());
         renderTabsAndChrome();
         renderList();
         renderReader();
@@ -1141,6 +1181,7 @@
         saveListScroll();
         currentContext().category = button.dataset.category;
         userChangedBrowseContext();
+        reconcileSelectionForResults(filtered());
         render();
         restoreListScroll();
       } else if (button.dataset.id) {
@@ -1169,6 +1210,7 @@
         saveListScroll();
         currentContext().onlyUnlearned = !currentContext().onlyUnlearned;
         userChangedBrowseContext();
+        reconcileSelectionForResults(filtered());
         render();
         restoreListScroll();
       } else if (button.id === 'random') {
@@ -1178,12 +1220,16 @@
       } else if (button.id === 'empty-clear-search') {
         currentContext().query = '';
         $('search').value = '';
+        userChangedBrowseContext();
+        reconcileSelectionForResults(filtered());
         render();
         $('search').focus();
       } else if (button.id === 'reset-filters') resetCurrentFilters();
       else if (button.id === 'clear-search') {
         currentContext().query = '';
         $('search').value = '';
+        userChangedBrowseContext();
+        reconcileSelectionForResults(filtered());
         render();
         $('search').focus();
       } else if (button.id === 'more-open') {
@@ -1200,12 +1246,16 @@
       } else if (button.id === 'progress-open') $('progress-dialog').showModal();
       else if (button.id === 'progress-close') $('progress-dialog').close();
       else if (button.id === 'export-progress') exportProgress();
+      else if (button.id === 'import-progress-button') $('import-progress').click();
       else if (button.id === 'confirm-import') confirmProgressImport();
       else if (button.id === 'cancel-import') {
         importCandidate = null;
         $('import-preview').hidden = true;
       } else if (button.id === 'audio-toggle') {
-        if (audio.paused) audio.play().catch(handleAutoplayFailure);
+        if (audio.paused) {
+          const requestId = player.requestId;
+          audio.play().catch(error => handlePlaybackFailure(error, requestId));
+        }
         else audio.pause();
       } else if (button.id === 'audio-prev') stepAudio(-1);
       else if (button.id === 'audio-next' || button.id === 'audio-next-compact') stepAudio(1);
@@ -1398,10 +1448,13 @@
     buildSearchIndexes,
     createBrowseContexts,
     createQueueSnapshot,
+    classifyPlaybackFailure,
     filterItems,
     init,
+    nextListScrollTop,
     normalizeSearch,
     parseRoute,
+    reconcileSelectedId,
     sanitizePreferences,
     stepQueueIndex,
     validateProgressImport,

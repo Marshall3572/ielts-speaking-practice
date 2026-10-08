@@ -151,6 +151,57 @@ test('stepQueueIndex preserves queue boundaries instead of wrapping', () => {
   assert.equal(app.stepQueueIndex(2, 1, 3), 2);
 });
 
+test('reconcileSelectedId never overrides explicit route or playback navigation', () => {
+  const items = [{ id: 'T002' }];
+
+  assert.equal(app.reconcileSelectedId({
+    selectedId: 'T001',
+    items,
+    mobile: false,
+    filterChanged: false,
+  }), 'T001');
+  assert.equal(app.reconcileSelectedId({
+    selectedId: 'T001',
+    items,
+    mobile: false,
+    filterChanged: true,
+  }), 'T002');
+  assert.equal(app.reconcileSelectedId({
+    selectedId: 'T001',
+    items,
+    mobile: true,
+    filterChanged: true,
+  }), null);
+});
+
+test('next-question navigation cannot overwrite saved mobile list scroll', () => {
+  assert.equal(app.nextListScrollTop({
+    mobile: true,
+    mobileScreen: 'reader',
+    saved: 2200,
+    current: 650,
+  }), 2200);
+  assert.equal(app.nextListScrollTop({
+    mobile: true,
+    mobileScreen: 'list',
+    saved: 2200,
+    current: 2350,
+  }), 2350);
+  assert.equal(app.nextListScrollTop({
+    mobile: false,
+    mobileScreen: 'reader',
+    saved: 120,
+    current: 180,
+  }), 180);
+});
+
+test('classifyPlaybackFailure keeps media errors distinct from autoplay denial', () => {
+  assert.equal(app.classifyPlaybackFailure('NotAllowedError'), 'autoplay');
+  assert.equal(app.classifyPlaybackFailure('NotSupportedError'), 'media');
+  assert.equal(app.classifyPlaybackFailure('NetworkError'), 'media');
+  assert.equal(app.classifyPlaybackFailure('AbortError'), 'ignore');
+});
+
 test('validateProgressImport keeps valid boolean keys and counts ignored records', () => {
   const result = app.validateProgressImport(
     {
